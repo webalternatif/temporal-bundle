@@ -5,7 +5,10 @@
     },
     "logs": {
         "text": "var/infection/infection.log",
-        "summary": "var/infection/summary.log"
+        "summary": "var/infection/summary.log",
+        "stryker": {
+            "badge": "main"
+        }
     },
     "tmpDir": "var/infection",
     "minMsi": 100,

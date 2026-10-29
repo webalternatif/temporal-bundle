@@ -1,0 +1,90 @@
+name: tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  mago:
+    name: Mago (PHP ${{ matrix.php-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: [ "8.3", "8.4", "8.5" ]
+    env:
+      # Analyzes the code against the PHP version of the job instead of the one of mago.toml.
+      MAGO_PHP_VERSION: ${{ matrix.php-version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: none
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - uses: ramsey/composer-install@v3
+
+      - name: Analyze
+        run: composer analyze -- --reporting-format=github
+
+      - name: Lint
+        run: composer lint -- --reporting-format=github
+
+      - name: Check formatting
+        run: composer fmt-check
+
+  phpunit:
+    name: PHPUnit (PHP ${{ matrix.php-version }}, ${{ matrix.dependencies }} dependencies)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: [ "8.3", "8.4", "8.5" ]
+        # Lowest dependencies cover the oldest supported Symfony version (6.4), highest ones the latest.
+        dependencies: [ lowest, highest ]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: none
+
+      - uses: ramsey/composer-install@v3
+        with:
+          dependency-versions: ${{ matrix.dependencies }}
+
+      - name: Run PHPUnit
+        run: composer phpunit
+
+  infection:
+    name: Infection (PHP ${{ matrix.php-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: [ "8.3", "8.4", "8.5" ]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: pcov
+
+      - uses: ramsey/composer-install@v3
+
+      - name: Run Infection
+        run: composer infection
+        env:
+          # Only one job publishes the mutation testing badge, so that jobs do not overwrite each other's report.
+          STRYKER_DASHBOARD_API_KEY: ${{ matrix.php-version == '8.5' && secrets.STRYKER_DASHBOARD_API_KEY || '' }}
