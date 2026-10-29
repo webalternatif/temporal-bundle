@@ -36,10 +36,24 @@ final class KernelTest extends TestCase
 {
     private ?TestKernel $kernel = null;
 
+    /** @var callable|null */
+    private mixed $exceptionHandler = null;
+
+    #[\Override]
+    protected function setUp(): void
+    {
+        $this->exceptionHandler = self::getExceptionHandler();
+    }
+
     #[\Override]
     protected function tearDown(): void
     {
         $this->shutdown();
+
+        // FrameworkBundle < 7.0 registers its exception handler when booting, which makes PHPUnit flag tests as risky.
+        if (self::getExceptionHandler() !== $this->exceptionHandler) {
+            restore_exception_handler();
+        }
     }
 
     public function test_annotated_workflows_and_activities_are_registered(): void
@@ -120,6 +134,15 @@ final class KernelTest extends TestCase
         $this->kernel?->shutdown();
         $this->kernel?->removeVarDir();
         $this->kernel = null;
+    }
+
+    private static function getExceptionHandler(): ?callable
+    {
+        // `get_exception_handler()` is only available since PHP 8.5.
+        $handler = set_exception_handler(null);
+        restore_exception_handler();
+
+        return $handler;
     }
 
     private function createApplication(): Application

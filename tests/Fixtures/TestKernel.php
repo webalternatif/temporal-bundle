@@ -23,7 +23,7 @@ final class TestKernel extends Kernel
     public function __construct(
         private readonly array $temporalConfig,
     ) {
-        parent::__construct('test', true);
+        parent::__construct('test', false);
 
         // A fresh directory for each kernel, otherwise a container compiled by a previous test (or a previous run,
         // hiding `WebfTemporalBundle::build()` from code coverage and mutation testing) would be reused.
