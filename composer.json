@@ -48,15 +48,25 @@
         "analyze": "mago analyze",
         "fmt": "mago fmt",
         "fmt-check": "mago fmt --check",
+        "infection": "infection --threads=max",
         "lint": "mago lint",
-        "phpunit": "phpunit"
+        "phpunit": "phpunit",
+        "test": [
+            "@analyze",
+            "@phpunit",
+            "@infection",
+            "@lint",
+            "@fmt-check"
+        ]
     },
     "scripts-descriptions": {
         "analyze": "Run the Mago static analyzer",
         "fmt": "Format the code with Mago",
         "fmt-check": "Check that the code is formatted",
+        "infection": "Run mutation testing with Infection",
         "lint": "Run the Mago linter",
-        "phpunit": "Run the PHPUnit test suite"
+        "phpunit": "Run the PHPUnit test suite",
+        "test": "Run every check, as the CI does"
     },
     "autoload": {
         "psr-4": {
