@@ -2,7 +2,13 @@
     "name": "webalternatif/temporal-bundle",
     "description": "A bundle to integrate Temporal workflows and activities into Symfony applications",
     "type": "symfony-bundle",
-    "keywords": ["temporal", "workflow", "activity", "roadrunner", "bundle"],
+    "keywords": [
+        "temporal",
+        "workflow",
+        "activity",
+        "roadrunner",
+        "bundle"
+    ],
     "license": "MIT",
     "authors": [
         {
@@ -37,6 +43,18 @@
     },
     "suggest": {
         "doctrine/orm": "To reset Doctrine entity managers before each activity"
+    },
+    "scripts": {
+        "analyze": "mago analyze",
+        "fmt": "mago fmt",
+        "fmt-check": "mago fmt --check",
+        "lint": "mago lint"
+    },
+    "scripts-descriptions": {
+        "analyze": "Run the Mago static analyzer",
+        "fmt": "Format the code with Mago",
+        "fmt-check": "Check that the code is formatted",
+        "lint": "Run the Mago linter"
     },
     "autoload": {
         "psr-4": {

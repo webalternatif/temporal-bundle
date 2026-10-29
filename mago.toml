@@ -1,0 +1,23 @@
+# See https://mago.carthage.software/configuration
+php-version = "8.3"
+
+[source]
+paths = ["src", "tests"]
+includes = ["vendor"]
+
+[formatter]
+print-width = 120
+
+[linter]
+integrations = ["phpunit", "symfony"]
+
+[analyzer]
+ignore = [
+    # Definition arguments are `mixed`, tests check their type with assertions anyway.
+    { code = "mixed-assignment", in = ["tests/"] },
+]
+
+[linter.rules]
+# Tests use fake credentials and have a method per test case.
+no-literal-password = { exclude = ["tests/"] }
+too-many-methods = { exclude = ["tests/"] }
