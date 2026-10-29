@@ -48,13 +48,15 @@
         "analyze": "mago analyze",
         "fmt": "mago fmt",
         "fmt-check": "mago fmt --check",
-        "lint": "mago lint"
+        "lint": "mago lint",
+        "phpunit": "phpunit"
     },
     "scripts-descriptions": {
         "analyze": "Run the Mago static analyzer",
         "fmt": "Format the code with Mago",
         "fmt-check": "Check that the code is formatted",
-        "lint": "Run the Mago linter"
+        "lint": "Run the Mago linter",
+        "phpunit": "Run the PHPUnit test suite"
     },
     "autoload": {
         "psr-4": {
