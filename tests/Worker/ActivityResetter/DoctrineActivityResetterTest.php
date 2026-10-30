@@ -6,7 +6,7 @@ namespace Tests\Webf\TemporalBundle\Worker\ActivityResetter;
 
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception as DBALException;
-use Doctrine\DBAL\Platforms\SQLitePlatform;
+use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Result;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
@@ -104,13 +104,19 @@ final class DoctrineActivityResetterTest extends TestCase
 
     private function createDbalException(): DBALException
     {
-        return new class('Connection lost.') extends \RuntimeException implements DBALException {};
+        // A stub rather than an anonymous class because `Doctrine\DBAL\Exception` is a class in DBAL 3 and an interface in
+        // DBAL 4.
+        return $this->createStub(DBALException::class);
     }
 
     private function createConnection(): Connection&MockObject
     {
+        // A stub rather than a concrete platform because SQLitePlatform is named SqlitePlatform before DBAL 3.7, which
+        // the PSR-4 autoloader cannot find on case-sensitive filesystems.
+        $platform = $this->createConfiguredStub(AbstractPlatform::class, ['getDummySelectSQL' => 'SELECT 1']);
+
         $connection = $this->createMock(Connection::class);
-        $connection->method('getDatabasePlatform')->willReturn(new SQLitePlatform());
+        $connection->method('getDatabasePlatform')->willReturn($platform);
 
         return $connection;
     }
