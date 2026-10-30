@@ -10,6 +10,8 @@ use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
+use Symfony\Component\DependencyInjection\Compiler\RegisterEnvVarProcessorsPass;
+use Symfony\Component\DependencyInjection\Compiler\ValidateEnvPlaceholdersPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
@@ -247,6 +249,28 @@ final class WebfTemporalBundleTest extends TestCase
             [['withMaxConcurrentActivityExecutionSize', [1], true]],
             $container->getDefinition(WebfTemporalBundle::WORKER_OPTIONS_ID)->getMethodCalls(),
         );
+    }
+
+    public function test_max_concurrent_activity_execution_size_from_env(): void
+    {
+        $container = new ContainerBuilder();
+        $extension = (new WebfTemporalBundle())->getContainerExtension();
+        static::assertNotNull($extension);
+        $container->registerExtension($extension);
+        $placeholder = $container->getParameterBag()->resolveValue('%env(int:MAX_CONCURRENT_ACTIVITIES)%');
+        $container->loadFromExtension('webf_temporal', [
+            'address' => 'temporal:7233',
+            'worker' => ['max_concurrent_activity_execution_size' => $placeholder],
+        ]);
+
+        // Registers the "int" env var type, so that the placeholder is validated with a dummy value of 0.
+        (new RegisterEnvVarProcessorsPass())->process($container);
+        $pass = new ValidateEnvPlaceholdersPass();
+        $pass->process($container);
+
+        /** @var array{worker: array{max_concurrent_activity_execution_size: mixed}} $config */
+        $config = $pass->getExtensionConfig()['webf_temporal'];
+        static::assertSame($placeholder, $config['worker']['max_concurrent_activity_execution_size']);
     }
 
     public function test_doctrine_activity_resetter_is_registered_with_doctrine_bundle(): void
