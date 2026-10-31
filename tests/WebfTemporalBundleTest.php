@@ -34,6 +34,7 @@ use Tests\Webf\TemporalBundle\Fixtures\TaskQueue;
 use Webf\TemporalBundle\Client\ClientAuthMethod;
 use Webf\TemporalBundle\Client\ClientConfig;
 use Webf\TemporalBundle\Client\OidcApiKey;
+use Webf\TemporalBundle\Client\StaticApiKey;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 use Webf\TemporalBundle\Command\WorkerCommand;
 use Webf\TemporalBundle\WebfTemporalBundle;
@@ -144,15 +145,19 @@ final class WebfTemporalBundleTest extends TestCase
     {
         $container = $this->load(['address' => 'temporal:7233', 'api_key' => 'secret']);
 
-        static::assertSame(
-            [['withAuthKey', ['secret'], true]],
+        $apiKey = $container->getDefinition(WebfTemporalBundle::API_KEY_ID);
+        static::assertSame(StaticApiKey::class, $apiKey->getClass());
+        static::assertSame(['secret'], $apiKey->getArguments());
+
+        static::assertEquals(
+            [['withAuthKey', [new Reference(WebfTemporalBundle::API_KEY_ID)], true]],
             $container->getDefinition(WebfTemporalBundle::SERVICE_CLIENT_ID)->getMethodCalls(),
         );
 
         $credentials = $container->getDefinition(WebfTemporalBundle::WORKER_FACTORY_ID)->getArgument('$credentials');
         static::assertInstanceOf(Definition::class, $credentials);
         static::assertSame([ServiceCredentialsFactory::class, 'create'], $credentials->getFactory());
-        static::assertSame(['secret'], $credentials->getArguments());
+        $this->assertReferences([WebfTemporalBundle::API_KEY_ID], $credentials->getArguments());
 
         static::assertFalse($container->hasDefinition(WebfTemporalBundle::REFRESH_API_KEY_COMMAND_ID));
     }

@@ -26,6 +26,7 @@ use Temporal\Workflow\WorkflowInterface;
 use Webf\TemporalBundle\Client\ClientAuthMethod;
 use Webf\TemporalBundle\Client\ClientConfig;
 use Webf\TemporalBundle\Client\OidcApiKey;
+use Webf\TemporalBundle\Client\StaticApiKey;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 use Webf\TemporalBundle\Command\WorkerCommand;
 use Webf\TemporalBundle\DependencyInjection\Compiler\RegisterWorkflowsAndActivitiesPass;
@@ -206,7 +207,11 @@ final class WebfTemporalBundle extends AbstractBundle
         /** @var Config $config */
         $services = $configurator->services();
 
-        $apiKey = $config['api_key'];
+        $apiKey = null;
+        if (null !== $config['api_key']) {
+            $services->set(self::API_KEY_ID, StaticApiKey::class)->args([$config['api_key']]);
+            $apiKey = service(self::API_KEY_ID);
+        }
         if ($config['oidc']['enabled']) {
             $services
                 ->set(self::API_KEY_ID, OidcApiKey::class)

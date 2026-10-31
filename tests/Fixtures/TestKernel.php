@@ -6,6 +6,8 @@ namespace Tests\Webf\TemporalBundle\Fixtures;
 
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
+use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpKernel\Kernel;
@@ -60,6 +62,21 @@ final class TestKernel extends Kernel
         (new Filesystem())->remove($this->varDir);
     }
 
+    #[\Override]
+    protected function build(ContainerBuilder $container): void
+    {
+        $container->addCompilerPass(new class implements CompilerPassInterface {
+            #[\Override]
+            public function process(ContainerBuilder $container): void
+            {
+                $container
+                    ->getDefinition(WebfTemporalBundle::SERVICE_CLIENT_ID)
+                    ->setClass(GrpcLessServiceClient::class)
+                    ->setFactory([GrpcLessServiceClient::class, 'create']);
+            }
+        });
+    }
+
     private function configureContainer(ContainerConfigurator $container): void
     {
         $container->extension('framework', [
@@ -74,6 +91,8 @@ final class TestKernel extends Kernel
             ->autowire()
             ->autoconfigure()
             ->load('Tests\\Webf\\TemporalBundle\\Fixtures\\', __DIR__)
-            ->exclude([__DIR__ . '/{StopLoop,StoppingClock,TestKernel}.php']);
+            ->exclude([__DIR__ . '/{GrpcLessServiceClient,StopLoop,StoppingClock,TestKernel}.php'])
+            ->set(ServiceClientHolder::class)
+            ->public();
     }
 }

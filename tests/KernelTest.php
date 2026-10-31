@@ -11,15 +11,19 @@ use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\ApplicationTester;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Temporal\Client\GRPC\BaseClient;
+use Temporal\Client\GRPC\ServiceClient;
 use Temporal\Worker\WorkerFactoryInterface;
 use Temporal\Worker\WorkerInterface;
 use Temporal\Worker\WorkerOptions;
 use Tests\Webf\TemporalBundle\Fixtures\Activity\GreetingActivity;
 use Tests\Webf\TemporalBundle\Fixtures\CountingActivityResetter;
+use Tests\Webf\TemporalBundle\Fixtures\ServiceClientHolder;
 use Tests\Webf\TemporalBundle\Fixtures\TestKernel;
 use Tests\Webf\TemporalBundle\Fixtures\Workflow\GreetingWorkflow;
 use Webf\TemporalBundle\Client\ClientConfig;
 use Webf\TemporalBundle\Client\OidcApiKey;
+use Webf\TemporalBundle\Client\StaticApiKey;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 use Webf\TemporalBundle\Command\WorkerCommand;
 use Webf\TemporalBundle\DependencyInjection\Compiler\RegisterWorkflowsAndActivitiesPass;
@@ -34,6 +38,7 @@ use Webf\TemporalBundle\Worker\WorkerFactoryConfigurator;
 #[UsesClass(OidcApiKey::class)]
 #[UsesClass(RefreshApiKeyCommand::class)]
 #[UsesClass(RegisterWorkflowsAndActivitiesPass::class)]
+#[UsesClass(StaticApiKey::class)]
 #[UsesClass(WorkerCommand::class)]
 #[UsesClass(WorkerFactoryConfigurator::class)]
 final class KernelTest extends TestCase
@@ -117,6 +122,24 @@ final class KernelTest extends TestCase
         ]);
         static::assertTrue($this->createApplication()->has('temporal:refresh-api-key'));
         static::assertInstanceOf(OidcApiKey::class, $container->get(WebfTemporalBundle::API_KEY_ID));
+    }
+
+    /**
+     * An env placeholder hides the value of `api_key` until runtime, so a key that resolves to null (with the `default`
+     * env processor) must give unauthenticated clients, as a null `api_key` does, instead of a `TypeError`.
+     */
+    public function test_api_key_from_an_undefined_env_var_gives_unauthenticated_clients(): void
+    {
+        $container = $this->boot([
+            'address' => 'temporal:7233',
+            'api_key' => '%env(default::WEBF_TEMPORAL_UNDEFINED_API_KEY)%',
+        ]);
+
+        $holder = $container->get(ServiceClientHolder::class);
+        static::assertInstanceOf(ServiceClientHolder::class, $holder);
+        $client = $holder->client;
+        static::assertInstanceOf(ServiceClient::class, $client);
+        static::assertSame('', (string) (new \ReflectionProperty(BaseClient::class, 'apiKey'))->getValue($client));
     }
 
     /**
