@@ -131,14 +131,8 @@ final class OidcApiKey implements \Stringable
             );
         }
 
-        $expiresIn = $result['expires_in'] ?? null;
-        // Some servers, such as Azure AD v1, send the lifetime as a string. `is_numeric()` is not used because it
-        // accepts floats, exponents and surrounding whitespace, and `\z` because `$` also matches before a final "\n".
-        if (is_string($expiresIn) && 1 === preg_match('/\A\d+\z/', $expiresIn)) {
-            $expiresIn = (int) $expiresIn;
-        }
-
-        if (!is_string($result['access_token'] ?? null) || !is_int($expiresIn) || $expiresIn < 1) {
+        $expiresIn = self::parseExpiresIn($result['expires_in'] ?? null);
+        if (!is_string($result['access_token'] ?? null) || null === $expiresIn || $expiresIn < 1) {
             throw new OidcTokenException(sprintf(
                 'The response of "%s" does not contain a valid token.',
                 $this->tokenEndpoint,
@@ -148,6 +142,23 @@ final class OidcApiKey implements \Stringable
         // Half of the lifetime, so a slow call or a clock drift never leads to an expired token. At least one second,
         // otherwise a token living less than two seconds would be fetched again on every gRPC call.
         return new OidcToken($result['access_token'], $this->now() + max(1, intdiv(num1: $expiresIn, num2: 2)));
+    }
+
+    /**
+     * Some servers, such as Azure AD v1, send the lifetime as a string. `is_numeric()` is not used because it accepts
+     * floats, exponents and surrounding whitespace, and `\z` because `$` also matches before a final "\n".
+     */
+    private static function parseExpiresIn(mixed $expiresIn): ?int
+    {
+        if (is_int($expiresIn)) {
+            return $expiresIn;
+        }
+
+        if (is_string($expiresIn) && 1 === preg_match('/\A\d+\z/', $expiresIn)) {
+            return (int) $expiresIn;
+        }
+
+        return null;
     }
 
     private function now(): int

@@ -61,8 +61,8 @@ final class RegisterWorkflowsAndActivitiesPass implements CompilerPassInterface
         $idsByClass = [];
         foreach ($classes as $id => $class) {
             // The class can be a parameter ("%...%"), so it is resolved to compare it with the others.
-            $resolvedClass = $container->getParameterBag()->resolveValue($class);
-            if (\is_string($resolvedClass)) {
+            $resolvedClass = self::stringOrNull($container->getParameterBag()->resolveValue($class));
+            if (null !== $resolvedClass) {
                 $idsByClass[$resolvedClass][] = $id;
             }
         }
@@ -77,6 +77,11 @@ final class RegisterWorkflowsAndActivitiesPass implements CompilerPassInterface
                 ));
             }
         }
+    }
+
+    private static function stringOrNull(mixed $value): ?string
+    {
+        return \is_string($value) ? $value : null;
     }
 
     private function getClass(ContainerBuilder $container, string $id): string
