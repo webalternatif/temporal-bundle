@@ -89,11 +89,48 @@ final class RefreshApiKeyCommandTest extends TestCase
         $this->executeUntilStopped($tester);
 
         static::assertSame([RefreshApiKeyCommand::RETRY_DELAY, 30], $clock->sleeps);
+        static::assertSame('', $tester->getDisplay());
         static::assertSame(
             'Could not update the Temporal API key: Unable to fetch a token from "https://oidc.example.com/token".'
+            . PHP_EOL
+            . '  Caused by: HTTP 500 returned for "https://oidc.example.com/token".'
             . PHP_EOL,
-            $tester->getDisplay(),
+            $tester->getErrorOutput(),
         );
+    }
+
+    public function test_failure_messages_are_escaped(): void
+    {
+        $clock = $this->createClock(sleepsBeforeStop: 1);
+        $apiKey = $this->createApiKey($clock, [new JsonMockResponse(['access_token' => 'token', 'expires_in' => 60])]);
+
+        $rpc = $this->createStub(RPCConnectionInterface::class);
+        $rpc->method('call')->willThrowException(new \RuntimeException('Unexpected <info> tag'));
+
+        $tester = new CommandTester(new RefreshApiKeyCommand($apiKey, $rpc, $clock));
+
+        $this->executeUntilStopped($tester, ['decorated' => true]);
+
+        static::assertStringContainsString('Unexpected <info> tag', $tester->getErrorOutput());
+    }
+
+    public function test_errors_are_not_retried(): void
+    {
+        $clock = $this->createClock(sleepsBeforeStop: 1);
+        $apiKey = $this->createApiKey($clock, [new JsonMockResponse(['access_token' => 'token', 'expires_in' => 60])]);
+
+        $rpc = $this->createStub(RPCConnectionInterface::class);
+        $rpc->method('call')->willThrowException(new \TypeError('A bug, not a transient failure'));
+
+        $tester = new CommandTester(new RefreshApiKeyCommand($apiKey, $rpc, $clock));
+
+        $this->expectException(\TypeError::class);
+
+        try {
+            $tester->execute([]);
+        } finally {
+            static::assertSame([], $clock->sleeps);
+        }
     }
 
     public function test_command_is_named(): void
@@ -106,10 +143,14 @@ final class RefreshApiKeyCommandTest extends TestCase
         static::assertSame('temporal:refresh-api-key', $command->getName());
     }
 
-    private function executeUntilStopped(CommandTester $tester): void
+    /**
+     * @param array{decorated?: bool} $options
+     */
+    private function executeUntilStopped(CommandTester $tester, array $options = []): void
     {
         try {
-            $tester->execute([]);
+            // stderr is captured apart so the tests can check that failures are not written to stdout.
+            $tester->execute([], ['capture_stderr_separately' => true, ...$options]);
         } catch (StopLoop) {
             return;
         }

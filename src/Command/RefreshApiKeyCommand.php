@@ -8,7 +8,9 @@ use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Temporal\Worker\Transport\RPCConnectionInterface;
 use Webf\TemporalBundle\Client\OidcApiKey;
@@ -55,13 +57,39 @@ final class RefreshApiKeyCommand extends Command
                 $this->rpc->call(self::UPDATE_API_KEY_RPC_METHOD, (string) $this->apiKey);
 
                 $delay = max(self::RETRY_DELAY, $this->apiKey->willRefreshAt() - $this->clock->now()->getTimestamp());
-            } catch (\Throwable $e) {
-                $output->writeln(sprintf('<error>Could not update the Temporal API key: %s</error>', $e->getMessage()));
+            } catch (\Exception $e) {
+                // Only exceptions are retried: an `\Error` (such as a `TypeError`) is a bug that waiting does not fix,
+                // so it must stop the process and be seen instead of being retried forever.
+                $this->writeFailure(
+                    $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output,
+                    $e,
+                );
 
                 $delay = self::RETRY_DELAY;
             }
 
             $this->clock->sleep($delay);
+        }
+    }
+
+    private function writeFailure(OutputInterface $output, \Exception $e): void
+    {
+        // Messages come from outside (HTTP responses, RPC errors), so they are escaped: a "<" in them would be read
+        // as a formatting tag.
+        $output->writeln(sprintf(
+            '<error>Could not update the Temporal API key: %s</error>',
+            OutputFormatter::escape($e->getMessage()),
+        ));
+
+        // The first message is often a generic one (e.g. "Unable to fetch a token"), and the real cause is only in
+        // the previous exceptions.
+        $previous = $e->getPrevious();
+        while (null !== $previous) {
+            $output->writeln(sprintf(
+                '<error>  Caused by: %s</error>',
+                OutputFormatter::escape($previous->getMessage()),
+            ));
+            $previous = $previous->getPrevious();
         }
     }
 }
