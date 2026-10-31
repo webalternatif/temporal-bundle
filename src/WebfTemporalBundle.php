@@ -23,6 +23,8 @@ use Temporal\Worker\WorkerFactoryInterface;
 use Temporal\Worker\WorkerOptions;
 use Temporal\WorkerFactory;
 use Temporal\Workflow\WorkflowInterface;
+use Webf\TemporalBundle\Client\ClientAuthMethod;
+use Webf\TemporalBundle\Client\ClientConfig;
 use Webf\TemporalBundle\Client\OidcApiKey;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 use Webf\TemporalBundle\Command\WorkerCommand;
@@ -43,6 +45,7 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\tagged_it
  *     namespace: string,
  *     oidc: array{
  *         enabled: bool,
+ *         client_auth_method: value-of<ClientAuthMethod>,
  *         client_id: string,
  *         client_secret: string,
  *         token_endpoint: string
@@ -111,6 +114,11 @@ final class WebfTemporalBundle extends AbstractBundle
                     ->info('Fetch API keys from an OIDC server with the client credentials grant')
                     ->canBeEnabled()
                     ->children()
+                        ->enumNode('client_auth_method')
+                            ->info('How the client authenticates to the token endpoint (HTTP Basic is the one every server supports)')
+                            ->values(array_column(ClientAuthMethod::cases(), 'value'))
+                            ->defaultValue(ClientAuthMethod::ClientSecretBasic->value)
+                        ->end()
                         ->scalarNode('client_id')->isRequired()->cannotBeEmpty()->end()
                         ->scalarNode('client_secret')->isRequired()->cannotBeEmpty()->end()
                         ->scalarNode('token_endpoint')->isRequired()->cannotBeEmpty()->end()
@@ -203,8 +211,10 @@ final class WebfTemporalBundle extends AbstractBundle
             $services
                 ->set(self::API_KEY_ID, OidcApiKey::class)
                 ->arg('$tokenEndpoint', $config['oidc']['token_endpoint'])
-                ->arg('$clientId', $config['oidc']['client_id'])
-                ->arg('$clientSecret', $config['oidc']['client_secret'])
+                ->arg('$client', inline_service(ClientConfig::class)
+                    ->arg('$id', $config['oidc']['client_id'])
+                    ->arg('$secret', $config['oidc']['client_secret'])
+                    ->arg('$authMethod', ClientAuthMethod::from($config['oidc']['client_auth_method'])))
                 // The default HTTP client of the API key is used when FrameworkBundle does not provide one.
                 ->arg('$httpClient', service('http_client')->nullOnInvalid());
             $apiKey = service(self::API_KEY_ID);

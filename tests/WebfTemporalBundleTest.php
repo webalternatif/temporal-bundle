@@ -31,6 +31,8 @@ use Tests\Webf\TemporalBundle\Fixtures\EmptyTaskQueue;
 use Tests\Webf\TemporalBundle\Fixtures\IntBackedTaskQueue;
 use Tests\Webf\TemporalBundle\Fixtures\PureTaskQueue;
 use Tests\Webf\TemporalBundle\Fixtures\TaskQueue;
+use Webf\TemporalBundle\Client\ClientAuthMethod;
+use Webf\TemporalBundle\Client\ClientConfig;
 use Webf\TemporalBundle\Client\OidcApiKey;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 use Webf\TemporalBundle\Command\WorkerCommand;
@@ -40,6 +42,7 @@ use Webf\TemporalBundle\Worker\ServiceCredentialsFactory;
 use Webf\TemporalBundle\Worker\WorkerFactoryConfigurator;
 
 #[CoversClass(WebfTemporalBundle::class)]
+#[UsesClass(ClientConfig::class)]
 #[UsesClass(OidcApiKey::class)]
 final class WebfTemporalBundleTest extends TestCase
 {
@@ -170,8 +173,11 @@ final class WebfTemporalBundleTest extends TestCase
         static::assertEquals(
             [
                 '$tokenEndpoint' => 'https://oidc.example.com/token',
-                '$clientId' => 'id',
-                '$clientSecret' => 'secret',
+                '$client' => new Definition(ClientConfig::class, [
+                    '$id' => 'id',
+                    '$secret' => 'secret',
+                    '$authMethod' => ClientAuthMethod::ClientSecretBasic,
+                ]),
                 '$httpClient' => new Reference('http_client', ContainerBuilder::NULL_ON_INVALID_REFERENCE),
             ],
             $apiKey->getArguments(),
@@ -193,6 +199,23 @@ final class WebfTemporalBundleTest extends TestCase
         static::assertSame(RefreshApiKeyCommand::class, $command->getClass());
         static::assertTrue($command->hasTag('console.command'));
         $this->assertReferences([WebfTemporalBundle::API_KEY_ID, WebfTemporalBundle::RPC_ID], $command->getArguments());
+    }
+
+    public function test_oidc_client_auth_method(): void
+    {
+        $container = $this->load([
+            'address' => 'temporal:7233',
+            'oidc' => [
+                'client_auth_method' => 'client_secret_post',
+                'client_id' => 'id',
+                'client_secret' => 'secret',
+                'token_endpoint' => 'https://oidc.example.com/token',
+            ],
+        ]);
+
+        $client = $container->getDefinition(WebfTemporalBundle::API_KEY_ID)->getArgument('$client');
+        static::assertInstanceOf(Definition::class, $client);
+        static::assertSame(ClientAuthMethod::ClientSecretPost, $client->getArgument('$authMethod'));
     }
 
     public function test_oidc_api_key_uses_its_own_http_client_without_framework_bundle(): void
@@ -355,6 +378,18 @@ final class WebfTemporalBundleTest extends TestCase
                 'oidc' => ['client_id' => 'id', 'client_secret' => 'secret', 'token_endpoint' => 'https://oidc'],
             ],
             '"api_key" and "oidc" cannot be used together.',
+        ];
+        yield 'unknown oidc client auth method' => [
+            [
+                'address' => 'temporal:7233',
+                'oidc' => [
+                    'client_auth_method' => 'private_key_jwt',
+                    'client_id' => 'id',
+                    'client_secret' => 'secret',
+                    'token_endpoint' => 'https://oidc',
+                ],
+            ],
+            'The value "private_key_jwt" is not allowed for path "webf_temporal.oidc.client_auth_method".',
         ];
         foreach (['client_id', 'client_secret', 'token_endpoint'] as $key) {
             $oidc = ['client_id' => 'id', 'client_secret' => 'secret', 'token_endpoint' => 'https://oidc'];

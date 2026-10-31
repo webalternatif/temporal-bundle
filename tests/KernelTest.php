@@ -18,6 +18,7 @@ use Tests\Webf\TemporalBundle\Fixtures\Activity\GreetingActivity;
 use Tests\Webf\TemporalBundle\Fixtures\CountingActivityResetter;
 use Tests\Webf\TemporalBundle\Fixtures\TestKernel;
 use Tests\Webf\TemporalBundle\Fixtures\Workflow\GreetingWorkflow;
+use Webf\TemporalBundle\Client\ClientConfig;
 use Webf\TemporalBundle\Client\OidcApiKey;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 use Webf\TemporalBundle\Command\WorkerCommand;
@@ -29,6 +30,7 @@ use Webf\TemporalBundle\Worker\WorkerFactoryConfigurator;
  * Checks that the bundle works within a real application: autoconfiguration, compiler passes and console commands.
  */
 #[CoversClass(WebfTemporalBundle::class)]
+#[UsesClass(ClientConfig::class)]
 #[UsesClass(OidcApiKey::class)]
 #[UsesClass(RefreshApiKeyCommand::class)]
 #[UsesClass(RegisterWorkflowsAndActivitiesPass::class)]

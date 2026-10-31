@@ -98,6 +98,9 @@ webf_temporal:
     # (cannot be used with "api_key")
     oidc:
         enabled: false
+
+        # How the client authenticates to the token endpoint (HTTP Basic is the one every server supports)
+        client_auth_method: client_secret_basic # One of "client_secret_basic"; "client_secret_post"
         client_id: ~ # Required
         client_secret: ~ # Required
         token_endpoint: ~ # Required
@@ -278,7 +281,9 @@ With a static API key (`api_key` option), the key is given to the Temporal
 clients and to RoadRunner when workers start.
 
 With OIDC (`oidc` option), API keys are access tokens fetched with the
-[client credentials grant][8]. They are refreshed at half of their lifetime,
+[client credentials grant][8]. The client authenticates with HTTP Basic, which
+every server must support, unless `client_auth_method` is `client_secret_post`
+(credentials in the request body). They are refreshed at half of their lifetime,
 both by the Temporal clients and by the `temporal:refresh-api-key` command,
 which pushes them to RoadRunner. This command must run alongside workers, as a
 RoadRunner service:

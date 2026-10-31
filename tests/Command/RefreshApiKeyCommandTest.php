@@ -16,10 +16,12 @@ use Symfony\Component\HttpClient\Response\MockResponse;
 use Temporal\Worker\Transport\RPCConnectionInterface;
 use Tests\Webf\TemporalBundle\Fixtures\StopLoop;
 use Tests\Webf\TemporalBundle\Fixtures\StoppingClock;
+use Webf\TemporalBundle\Client\ClientConfig;
 use Webf\TemporalBundle\Client\OidcApiKey;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 
 #[CoversClass(RefreshApiKeyCommand::class)]
+#[UsesClass(ClientConfig::class)]
 #[UsesClass(OidcApiKey::class)]
 final class RefreshApiKeyCommandTest extends TestCase
 {
@@ -125,6 +127,11 @@ final class RefreshApiKeyCommandTest extends TestCase
      */
     private function createApiKey(ClockInterface $clock, iterable $responses): OidcApiKey
     {
-        return new OidcApiKey('https://oidc.example.com/token', 'id', 'secret', new MockHttpClient($responses), $clock);
+        return new OidcApiKey(
+            'https://oidc.example.com/token',
+            new ClientConfig('id', 'secret'),
+            new MockHttpClient($responses),
+            $clock,
+        );
     }
 }

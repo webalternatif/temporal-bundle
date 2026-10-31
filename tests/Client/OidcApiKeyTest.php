@@ -12,9 +12,12 @@ use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\JsonMockResponse;
 use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
+use Webf\TemporalBundle\Client\ClientAuthMethod;
+use Webf\TemporalBundle\Client\ClientConfig;
 use Webf\TemporalBundle\Client\OidcApiKey;
 use Webf\TemporalBundle\Exception\OidcTokenException;
 
+#[CoversClass(ClientConfig::class)]
 #[CoversClass(OidcApiKey::class)]
 final class OidcApiKeyTest extends TestCase
 {
@@ -28,18 +31,70 @@ final class OidcApiKeyTest extends TestCase
         $this->clock = new MockClock('@1000000000');
     }
 
-    public function test_token_is_fetched_with_client_credentials(): void
+    public function test_token_is_fetched_with_http_basic_authentication_by_default(): void
     {
         $requests = [];
         $apiKey = $this->createApiKey(static function (string $method, string $url, array $options) use (&$requests) {
-            $requests[] = [$method, $url, $options['body']];
+            $requests[] = [$method, $url, $options['normalized_headers']['authorization'] ?? null, $options['body']];
 
             return new JsonMockResponse(['access_token' => 'token', 'expires_in' => 3600]);
         });
 
         static::assertSame('token', (string) $apiKey);
         static::assertSame(
-            [['POST', self::TOKEN_ENDPOINT, 'client_id=id&client_secret=secret&grant_type=client_credentials']],
+            [[
+                'POST',
+                self::TOKEN_ENDPOINT,
+                ['Authorization: Basic ' . base64_encode('id:secret')],
+                'grant_type=client_credentials',
+            ]],
+            $requests,
+        );
+    }
+
+    public function test_http_basic_credentials_are_form_encoded(): void
+    {
+        $authorization = null;
+        $httpClient = new MockHttpClient(static function (string $method, string $url, array $options) use (
+            &$authorization,
+        ) {
+            $authorization = $options['normalized_headers']['authorization'] ?? null;
+
+            return new JsonMockResponse(['access_token' => 'token', 'expires_in' => 3600]);
+        });
+
+        (string) new OidcApiKey(
+            self::TOKEN_ENDPOINT,
+            new ClientConfig('my client', 'p@ss:wörd'),
+            $httpClient,
+            $this->clock,
+        );
+
+        // RFC 6749 §2.3.1: both values are encoded with "application/x-www-form-urlencoded" before being joined.
+        static::assertSame(['Authorization: Basic ' . base64_encode('my+client:p%40ss%3Aw%C3%B6rd')], $authorization);
+    }
+
+    public function test_token_is_fetched_with_credentials_in_the_body_with_client_secret_post(): void
+    {
+        $requests = [];
+        $httpClient = new MockHttpClient(static function (string $method, string $url, array $options) use (
+            &$requests,
+        ) {
+            $requests[] = [$method, $url, $options['normalized_headers']['authorization'] ?? null, $options['body']];
+
+            return new JsonMockResponse(['access_token' => 'token', 'expires_in' => 3600]);
+        });
+
+        $apiKey = new OidcApiKey(
+            self::TOKEN_ENDPOINT,
+            new ClientConfig('id', 'secret', ClientAuthMethod::ClientSecretPost),
+            $httpClient,
+            $this->clock,
+        );
+
+        static::assertSame('token', (string) $apiKey);
+        static::assertSame(
+            [['POST', self::TOKEN_ENDPOINT, null, 'client_id=id&client_secret=secret&grant_type=client_credentials']],
             $requests,
         );
     }
@@ -145,7 +200,7 @@ final class OidcApiKeyTest extends TestCase
 
     public function test_default_http_client_and_clock_are_usable(): void
     {
-        $apiKey = new OidcApiKey(self::TOKEN_ENDPOINT, 'id', 'secret');
+        $apiKey = new OidcApiKey(self::TOKEN_ENDPOINT, new ClientConfig('id', 'secret'));
 
         static::assertInstanceOf(\Stringable::class, $apiKey);
     }
@@ -155,6 +210,11 @@ final class OidcApiKeyTest extends TestCase
      */
     private function createApiKey(callable|iterable $responses): OidcApiKey
     {
-        return new OidcApiKey(self::TOKEN_ENDPOINT, 'id', 'secret', new MockHttpClient($responses), $this->clock);
+        return new OidcApiKey(
+            self::TOKEN_ENDPOINT,
+            new ClientConfig('id', 'secret'),
+            new MockHttpClient($responses),
+            $this->clock,
+        );
     }
 }

@@ -24,9 +24,7 @@ final class OidcApiKey implements \Stringable
 
     public function __construct(
         private readonly string $tokenEndpoint,
-        private readonly string $clientId,
-        #[\SensitiveParameter]
-        private readonly string $clientSecret,
+        private readonly ClientConfig $client,
         ?HttpClientInterface $httpClient = null,
         // `Clock` delegates to the global clock, which is the one configured by FrameworkBundle when available.
         private readonly ClockInterface $clock = new Clock(),
@@ -65,14 +63,24 @@ final class OidcApiKey implements \Stringable
      */
     private function fetchToken(): string
     {
-        try {
-            $result = $this->httpClient->request('POST', $this->tokenEndpoint, [
+        $options = match ($this->client->authMethod) {
+            // RFC 6749 §2.3.1 encodes both values with "application/x-www-form-urlencoded" before joining them, so a
+            // ":" in the client ID or any non ASCII character survives. `auth_basic` does not encode them itself.
+            ClientAuthMethod::ClientSecretBasic => [
+                'auth_basic' => [urlencode($this->client->id), urlencode($this->client->secret)],
+                'body' => ['grant_type' => 'client_credentials'],
+            ],
+            ClientAuthMethod::ClientSecretPost => [
                 'body' => [
-                    'client_id' => $this->clientId,
-                    'client_secret' => $this->clientSecret,
+                    'client_id' => $this->client->id,
+                    'client_secret' => $this->client->secret,
                     'grant_type' => 'client_credentials',
                 ],
-            ])->toArray();
+            ],
+        };
+
+        try {
+            $result = $this->httpClient->request('POST', $this->tokenEndpoint, $options)->toArray();
         } catch (\Throwable $e) {
             throw new OidcTokenException(
                 sprintf('Unable to fetch a token from "%s".', $this->tokenEndpoint),
