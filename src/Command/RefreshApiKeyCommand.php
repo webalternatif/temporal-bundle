@@ -54,9 +54,15 @@ final class RefreshApiKeyCommand extends Command
         // RoadRunner stops this command with a signal when it stops itself.
         while (true) {
             try {
+                // Read before the key: if the key is refreshed between the two reads (or by another process through the
+                // cache), the pushed key is newer than this time, so the next push only comes earlier. Read after the
+                // key (and the push, which can be slow), it could be the time of a key that was never pushed, and
+                // RoadRunner would keep the old key after it expires.
+                $refreshAt = $this->apiKey->willRefreshAt();
+
                 $this->rpc->call(self::UPDATE_API_KEY_RPC_METHOD, (string) $this->apiKey);
 
-                $delay = max(self::RETRY_DELAY, $this->apiKey->willRefreshAt() - $this->clock->now()->getTimestamp());
+                $delay = max(self::RETRY_DELAY, $refreshAt - $this->clock->now()->getTimestamp());
             } catch (\Exception $e) {
                 // Only exceptions are retried: an `\Error` (such as a `TypeError`) is a bug that waiting does not fix,
                 // so it must stop the process and be seen instead of being retried forever.

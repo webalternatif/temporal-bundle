@@ -61,6 +61,37 @@ final class RefreshApiKeyCommandTest extends TestCase
         static::assertSame('', $tester->getDisplay());
     }
 
+    public function test_key_refreshed_during_a_slow_push_is_pushed_too(): void
+    {
+        $mockClock = new MockClock('@1000000000');
+        $clock = new StoppingClock($mockClock, sleepsBeforeStop: 2);
+        $apiKey = $this->createApiKey($clock, [
+            new JsonMockResponse(['access_token' => 'first', 'expires_in' => 60]),
+            new JsonMockResponse(['access_token' => 'second', 'expires_in' => 60]),
+            new JsonMockResponse(['access_token' => 'third', 'expires_in' => 60]),
+        ]);
+
+        $rpc = $this->createMock(RPCConnectionInterface::class);
+        $pushed = [];
+        $rpc
+            ->expects($this->exactly(2))
+            ->method('call')
+            ->willReturnCallback(static function (string $method, mixed $payload) use (&$pushed, $mockClock): mixed {
+                $pushed[] = $payload;
+                // The push lasts until the key should be refreshed.
+                $mockClock->sleep(30);
+
+                return null;
+            });
+
+        $tester = new CommandTester(new RefreshApiKeyCommand($apiKey, $rpc, $clock));
+
+        $this->executeUntilStopped($tester);
+
+        static::assertSame(['first', 'second'], $pushed);
+        static::assertSame([RefreshApiKeyCommand::RETRY_DELAY, RefreshApiKeyCommand::RETRY_DELAY], $clock->sleeps);
+    }
+
     public function test_keys_are_not_pushed_more_often_than_the_retry_delay(): void
     {
         $clock = $this->createClock(sleepsBeforeStop: 1);
