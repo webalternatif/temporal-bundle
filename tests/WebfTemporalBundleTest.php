@@ -38,11 +38,13 @@ use Webf\TemporalBundle\Client\OidcToken;
 use Webf\TemporalBundle\Client\StaticApiKey;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 use Webf\TemporalBundle\Command\WorkerCommand;
+use Webf\TemporalBundle\DependencyInjection\TaskQueues;
 use Webf\TemporalBundle\WebfTemporalBundle;
 use Webf\TemporalBundle\Worker\ActivityResetter\DoctrineActivityResetter;
 use Webf\TemporalBundle\Worker\ServiceCredentialsFactory;
 use Webf\TemporalBundle\Worker\WorkerFactoryConfigurator;
 
+#[CoversClass(TaskQueues::class)]
 #[CoversClass(WebfTemporalBundle::class)]
 #[UsesClass(ClientConfig::class)]
 #[UsesClass(OidcApiKey::class)]
@@ -370,6 +372,10 @@ final class WebfTemporalBundleTest extends TestCase
         yield 'empty task queue' => [
             ['address' => 'temporal:7233', 'task_queues' => ['']],
             'The path "webf_temporal.task_queues.0" cannot contain an empty value',
+        ];
+        yield 'duplicate task queues' => [
+            ['address' => 'temporal:7233', 'task_queues' => ['first', 'second', 'first', 'third', 'second', 'first']],
+            'Invalid configuration for path "webf_temporal.task_queues": Task queues must be unique, "first", "second" given more than once.',
         ];
         yield 'enum without case as task queues' => [
             ['address' => 'temporal:7233', 'task_queues' => EmptyTaskQueue::class],

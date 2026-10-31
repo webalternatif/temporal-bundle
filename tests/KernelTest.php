@@ -28,6 +28,7 @@ use Webf\TemporalBundle\Client\StaticApiKey;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 use Webf\TemporalBundle\Command\WorkerCommand;
 use Webf\TemporalBundle\DependencyInjection\Compiler\RegisterWorkflowsAndActivitiesPass;
+use Webf\TemporalBundle\DependencyInjection\TaskQueues;
 use Webf\TemporalBundle\WebfTemporalBundle;
 use Webf\TemporalBundle\Worker\WorkerFactoryConfigurator;
 
@@ -41,6 +42,7 @@ use Webf\TemporalBundle\Worker\WorkerFactoryConfigurator;
 #[UsesClass(RefreshApiKeyCommand::class)]
 #[UsesClass(RegisterWorkflowsAndActivitiesPass::class)]
 #[UsesClass(StaticApiKey::class)]
+#[UsesClass(TaskQueues::class)]
 #[UsesClass(WorkerCommand::class)]
 #[UsesClass(WorkerFactoryConfigurator::class)]
 final class KernelTest extends TestCase

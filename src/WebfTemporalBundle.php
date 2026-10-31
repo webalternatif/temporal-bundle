@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Webf\TemporalBundle;
 
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
-use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
@@ -30,6 +29,7 @@ use Webf\TemporalBundle\Client\StaticApiKey;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 use Webf\TemporalBundle\Command\WorkerCommand;
 use Webf\TemporalBundle\DependencyInjection\Compiler\RegisterWorkflowsAndActivitiesPass;
+use Webf\TemporalBundle\DependencyInjection\TaskQueues;
 use Webf\TemporalBundle\Worker\ActivityResetter\DoctrineActivityResetter;
 use Webf\TemporalBundle\Worker\ActivityResetterInterface;
 use Webf\TemporalBundle\Worker\ServiceCredentialsFactory;
@@ -134,8 +134,11 @@ final class WebfTemporalBundle extends AbstractBundle
                     ->info('Task queues polled by the "temporal:worker" command (or the name of a string-backed enum whose values are the task queues)')
                     ->beforeNormalization()
                         ->ifString()
-                        ->then(self::normalizeTaskQueueEnum(...))
+                        ->then(TaskQueues::normalizeEnum(...))
                     ->end()
+                    // The SDK registers each worker under the name of its task queue and throws an error that does
+                    // not name the option when a name is used twice.
+                    ->validate()->always(TaskQueues::rejectDuplicates(...))->end()
                     ->requiresAtLeastOneElement()
                     ->scalarPrototype()->cannotBeEmpty()->end()
                     ->defaultValue([WorkerFactoryInterface::DEFAULT_TASK_QUEUE])
@@ -176,31 +179,6 @@ final class WebfTemporalBundle extends AbstractBundle
                     ->end()
                 ->end()
             ->end();
-    }
-
-    /**
-     * A string that is not a string-backed enum is rejected instead of being treated as a single task queue, so that a
-     * typo in the enum name does not silently become a task queue name.
-     *
-     * @return list<string>
-     */
-    private static function normalizeTaskQueueEnum(string $enum): array
-    {
-        $reflection = enum_exists($enum) ? new \ReflectionEnum($enum) : null;
-        if ('string' !== $reflection?->getBackingType()?->getName()) {
-            throw new InvalidConfigurationException(sprintf(
-                'The path "webf_temporal.task_queues" must be a list of task queues or the name of a string-backed enum, "%s" given.',
-                $enum,
-            ));
-        }
-
-        // Every case of a backed enum is a backed case.
-        /** @var list<\ReflectionEnumBackedCase> $cases */
-        $cases = $reflection->getCases();
-
-        // Backing values are strings, as checked above (a cast would be an equivalent mutant for Infection).
-        /** @var list<string> */
-        return array_map(static fn(\ReflectionEnumBackedCase $case): int|string => $case->getBackingValue(), $cases);
     }
 
     #[\Override]
