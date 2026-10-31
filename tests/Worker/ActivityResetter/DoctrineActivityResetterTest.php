@@ -37,6 +37,17 @@ final class DoctrineActivityResetterTest extends TestCase
         (new DoctrineActivityResetter($registry))->reset();
     }
 
+    public function test_connections_that_are_not_open_are_not_pinged(): void
+    {
+        $connection = $this->createConnection(isConnected: false);
+        $connection->expects($this->never())->method('executeQuery');
+        $connection->expects($this->never())->method('close');
+
+        $registry = $this->createRegistry(['default' => $this->createEntityManager($connection, isOpen: true)]);
+
+        (new DoctrineActivityResetter($registry))->reset();
+    }
+
     public function test_lost_connections_are_reconnected(): void
     {
         $events = [];
@@ -66,31 +77,16 @@ final class DoctrineActivityResetterTest extends TestCase
         static::assertSame(['query', 'close', 'query'], $events);
     }
 
-    public function test_connections_left_in_a_transaction_are_closed_before_the_ping(): void
+    public function test_connections_left_in_a_transaction_are_closed_instead_of_pinged(): void
     {
-        $events = [];
         $connection = $this->createConnection();
         $connection->method('isTransactionActive')->willReturn(true);
-        $connection
-            ->expects($this->once())
-            ->method('close')
-            ->willReturnCallback(static function () use (&$events): void {
-                $events[] = 'close';
-            });
-        $connection
-            ->expects($this->once())
-            ->method('executeQuery')
-            ->willReturnCallback(function () use (&$events): Result {
-                $events[] = 'query';
-
-                return $this->createStub(Result::class);
-            });
+        $connection->expects($this->once())->method('close');
+        $connection->expects($this->never())->method('executeQuery');
 
         $registry = $this->createRegistry(['default' => $this->createEntityManager($connection, isOpen: true)]);
 
         (new DoctrineActivityResetter($registry))->reset();
-
-        static::assertSame(['close', 'query'], $events);
     }
 
     public function test_exception_is_thrown_when_the_connection_cannot_be_reestablished(): void
@@ -136,7 +132,7 @@ final class DoctrineActivityResetterTest extends TestCase
         return $this->createStub(DBALException::class);
     }
 
-    private function createConnection(): Connection&MockObject
+    private function createConnection(bool $isConnected = true): Connection&MockObject
     {
         // A stub rather than a concrete platform because SQLitePlatform is named SqlitePlatform before DBAL 3.7, which
         // the PSR-4 autoloader cannot find on case-sensitive filesystems.
@@ -144,6 +140,7 @@ final class DoctrineActivityResetterTest extends TestCase
 
         $connection = $this->createMock(Connection::class);
         $connection->method('getDatabasePlatform')->willReturn($platform);
+        $connection->method('isConnected')->willReturn($isConnected);
 
         return $connection;
     }

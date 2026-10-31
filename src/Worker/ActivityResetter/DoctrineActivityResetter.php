@@ -12,7 +12,7 @@ use Webf\TemporalBundle\Worker\ActivityResetterInterface;
 
 /**
  * Clears every Doctrine manager, rolls back transactions left open, reconnects lost database connections and resets closed
- * entity managers.
+ * entity managers. Connections that are not open are left closed.
  *
  * This is the same as what Messenger does between two messages with its `doctrine_ping_connection` and
  * `doctrine_clear_entity_manager` middlewares.
@@ -46,13 +46,32 @@ final readonly class DoctrineActivityResetter implements ActivityResetterInterfa
             return;
         }
 
-        $connection = $manager->getConnection();
+        $this->resetConnection($manager->getConnection());
 
+        if (!$manager->isOpen()) {
+            $this->managerRegistry->resetManager($name);
+        }
+    }
+
+    /**
+     * @throws DBALException
+     */
+    private function resetConnection(Connection $connection): void
+    {
         // An activity that failed in the middle of a transaction leaves it open, so the next activities would write into a
         // transaction that nobody commits. Closing drops every nesting level at once and makes the server roll back. A
-        // `rollBack()` would only undo one level, and it would throw if the connection is already lost.
+        // `rollBack()` would only undo one level, and it would throw if the connection is already lost. No ping is needed
+        // after it because the next query opens a new connection.
         if ($connection->isTransactionActive()) {
             $connection->close();
+
+            return;
+        }
+
+        // A connection that is not open is not pinged, like Messenger does. Pinging it would open a connection for
+        // activities that do not use the database, and make all of them fail while the database is down.
+        if (!$connection->isConnected()) {
+            return;
         }
 
         try {
@@ -61,10 +80,6 @@ final readonly class DoctrineActivityResetter implements ActivityResetterInterfa
             // The server may have closed the connection after a long idle time, the next query reconnects.
             $connection->close();
             $this->ping($connection);
-        }
-
-        if (!$manager->isOpen()) {
-            $this->managerRegistry->resetManager($name);
         }
     }
 
