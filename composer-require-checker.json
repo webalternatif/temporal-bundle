@@ -1,0 +1,8 @@
+{
+    "symbol-whitelist": [
+        "Doctrine\\DBAL\\Connection",
+        "Doctrine\\DBAL\\Exception",
+        "Doctrine\\ORM\\EntityManagerInterface",
+        "Doctrine\\Persistence\\ManagerRegistry"
+    ]
+}

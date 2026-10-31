@@ -375,11 +375,20 @@ composer fmt-check
 
 To format the code, execute `composer fmt`.
 
+The CI also checks with [ComposerRequireChecker][12] that each package used by
+the code is declared in `composer.json`. It is not a dev dependency, because
+its latest version does not support all the PHP and Symfony versions of the
+bundle. Once it is installed, run it like this:
+
+```bash
+composer-require-checker check --config-file=composer-require-checker.json
+```
+
 ## Releasing
 
-Commits follow the [conventional commits][12] specification, which allows
-generating the changelog with [git-cliff][13]. To release a new version, run
-`just release` (see [just][14]), which updates `CHANGELOG.md`, then commits and
+Commits follow the [conventional commits][13] specification, which allows
+generating the changelog with [git-cliff][14]. To release a new version, run
+`just release` (see [just][15]), which updates `CHANGELOG.md`, then commits and
 tags the new version. Then, push the release commit and its tag:
 
 ```bash
@@ -403,6 +412,7 @@ This bundle is released under the [MIT license](LICENSE).
 [9]: https://mago.carthage.software
 [10]: https://phpunit.de
 [11]: https://infection.github.io
-[12]: https://www.conventionalcommits.org
-[13]: https://git-cliff.org
-[14]: https://just.systems
+[12]: https://github.com/maglnet/ComposerRequireChecker
+[13]: https://www.conventionalcommits.org
+[14]: https://git-cliff.org
+[15]: https://just.systems

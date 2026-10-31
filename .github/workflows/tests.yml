@@ -42,6 +42,28 @@ jobs:
       - name: Check formatting
         run: composer fmt-check
 
+  composer-require-checker:
+    name: Composer Require Checker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The tool is installed as a PHAR rather than as a dev dependency: its latest version needs PHP 8.4+ and
+      # symfony/console ^8, which would break the PHP 8.3 jobs and stop the tests on Symfony 6.4 and 7.4.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          coverage: none
+          tools: composer-require-checker
+
+      - uses: ramsey/composer-install@v3
+
+      # Checks that each package used by the code is declared in composer.json, and not only installed because another
+      # package requires it. The Doctrine symbols are allowed in composer-require-checker.json because Doctrine is
+      # optional: DoctrineActivityResetter is registered only when DoctrineBundle is enabled.
+      - name: Check the dependencies
+        run: composer-require-checker check --config-file=composer-require-checker.json
+
   phpunit:
     name: PHPUnit (PHP ${{ matrix.php-version }}, ${{ matrix.dependencies }} dependencies)
     runs-on: ubuntu-latest
