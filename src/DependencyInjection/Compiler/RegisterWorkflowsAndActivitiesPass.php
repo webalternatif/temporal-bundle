@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Webf\TemporalBundle\DependencyInjection\Compiler;
 
+use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\Compiler\ServiceLocatorTagPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -24,15 +25,17 @@ final class RegisterWorkflowsAndActivitiesPass implements CompilerPassInterface
             return;
         }
 
+        // Abstract services are rejected with a clear message. Otherwise an abstract activity only fails later with an
+        // unclear service locator error, and an abstract workflow class fails at runtime in the SDK.
         $activityClasses = [];
         $activityReferences = [];
-        foreach (array_keys($container->findTaggedServiceIds(WebfTemporalBundle::ACTIVITY_TAG)) as $id) {
+        foreach (array_keys($container->findTaggedServiceIds(WebfTemporalBundle::ACTIVITY_TAG, true)) as $id) {
             $activityClasses[$id] = $this->getClass($container, $id);
             $activityReferences[$id] = new Reference($id);
         }
 
         $workflowClasses = [];
-        foreach (array_keys($container->findTaggedServiceIds(WebfTemporalBundle::WORKFLOW_TAG)) as $id) {
+        foreach (array_keys($container->findTaggedServiceIds(WebfTemporalBundle::WORKFLOW_TAG, true)) as $id) {
             $workflowClasses[] = $this->getClass($container, $id);
         }
 
@@ -45,7 +48,16 @@ final class RegisterWorkflowsAndActivitiesPass implements CompilerPassInterface
 
     private function getClass(ContainerBuilder $container, string $id): string
     {
+        // This pass runs before `ResolveChildDefinitionsPass`, so a child definition (`parent:`) has no class when it
+        // inherits the one of its parent. The pass cannot run after it: `ResolveNamedArgumentsPass` runs in the same
+        // step, and the named arguments set here would then never be resolved. Class parameters ("%...%") are not
+        // resolved here because `ResolveParameterPlaceHoldersPass` resolves them later in the arguments set here.
+        $definition = $container->findDefinition($id);
+        while (null === $definition->getClass() && $definition instanceof ChildDefinition) {
+            $definition = $container->findDefinition($definition->getParent());
+        }
+
         // `ResolveClassPass` only infers the class of services whose id is a class name, a definition may still have none.
-        return $container->findDefinition($id)->getClass() ?? $id;
+        return $definition->getClass() ?? $id;
     }
 }

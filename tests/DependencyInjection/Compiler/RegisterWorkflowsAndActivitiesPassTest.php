@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Tests\Webf\TemporalBundle\DependencyInjection\Compiler;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\Argument\ServiceClosureArgument;
+use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
+use Symfony\Component\DependencyInjection\Exception\InvalidArgumentException;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\DependencyInjection\ServiceLocator;
 use Tests\Webf\TemporalBundle\Fixtures\Activity\GreetingActivity;
@@ -68,5 +71,56 @@ final class RegisterWorkflowsAndActivitiesPassTest extends TestCase
             static::assertInstanceOf(ServiceClosureArgument::class, $service);
             static::assertSame($id, (string) $service->getValues()[0]);
         }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function tags(): iterable
+    {
+        yield 'activity' => [WebfTemporalBundle::ACTIVITY_TAG];
+        yield 'workflow' => [WebfTemporalBundle::WORKFLOW_TAG];
+    }
+
+    #[DataProvider('tags')]
+    public function test_abstract_tagged_services_are_rejected(string $tag): void
+    {
+        $container = new ContainerBuilder();
+        $container->register(WebfTemporalBundle::WORKER_FACTORY_CONFIGURATOR_ID, WorkerFactoryConfigurator::class);
+        $container->register('abstract_service', GreetingActivity::class)->setAbstract(true)->addTag($tag);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'The service "abstract_service" tagged "%s" must not be abstract.',
+            $tag,
+        ));
+
+        (new RegisterWorkflowsAndActivitiesPass())->process($container);
+    }
+
+    public function test_class_of_child_definitions_is_inherited_from_their_parents(): void
+    {
+        $container = new ContainerBuilder();
+        $configurator = $container->register(
+            WebfTemporalBundle::WORKER_FACTORY_CONFIGURATOR_ID,
+            WorkerFactoryConfigurator::class,
+        );
+        $container->register('parent_activity', GreetingActivity::class)->setAbstract(true);
+        $container->setDefinition('intermediate_activity', new ChildDefinition('parent_activity'))->setAbstract(true);
+        $container
+            ->setDefinition('child_activity', new ChildDefinition('intermediate_activity'))
+            ->addTag(WebfTemporalBundle::ACTIVITY_TAG);
+        $container->register('parent_workflow', GreetingWorkflow::class)->setAbstract(true);
+        $container
+            ->setDefinition('child_workflow', new ChildDefinition('parent_workflow'))
+            ->addTag(WebfTemporalBundle::WORKFLOW_TAG);
+
+        (new RegisterWorkflowsAndActivitiesPass())->process($container);
+
+        static::assertSame(
+            ['child_activity' => GreetingActivity::class],
+            $configurator->getArgument('$activityClasses'),
+        );
+        static::assertSame([GreetingWorkflow::class], $configurator->getArgument('$workflowClasses'));
     }
 }
