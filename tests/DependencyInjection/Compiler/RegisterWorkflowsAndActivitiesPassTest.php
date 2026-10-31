@@ -98,6 +98,37 @@ final class RegisterWorkflowsAndActivitiesPassTest extends TestCase
         (new RegisterWorkflowsAndActivitiesPass())->process($container);
     }
 
+    /**
+     * @return iterable<string, array{string, class-string}>
+     */
+    public static function tagsAndClasses(): iterable
+    {
+        yield 'activity' => [WebfTemporalBundle::ACTIVITY_TAG, GreetingActivity::class];
+        yield 'workflow' => [WebfTemporalBundle::WORKFLOW_TAG, GreetingWorkflow::class];
+    }
+
+    #[DataProvider('tagsAndClasses')]
+    public function test_tagged_services_sharing_a_class_are_rejected(string $tag, string $class): void
+    {
+        $container = new ContainerBuilder();
+        $container->register(WebfTemporalBundle::WORKER_FACTORY_CONFIGURATOR_ID, WorkerFactoryConfigurator::class);
+        $container->register('first', $class)->addTag($tag);
+        $container->register('unique', \stdClass::class)->addTag($tag);
+        $container->setParameter('class', $class);
+        $container->register('second', '%class%')->addTag($tag);
+        $container->register('parent', $class)->setAbstract(true);
+        $container->setDefinition('third', new ChildDefinition('parent'))->addTag($tag);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'The services "first", "second", "third" tagged "%s" share the class "%s".',
+            $tag,
+            $class,
+        ));
+
+        (new RegisterWorkflowsAndActivitiesPass())->process($container);
+    }
+
     public function test_class_of_child_definitions_is_inherited_from_their_parents(): void
     {
         $container = new ContainerBuilder();

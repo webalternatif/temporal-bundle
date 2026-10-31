@@ -8,6 +8,7 @@ use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\Compiler\ServiceLocatorTagPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Exception\InvalidArgumentException;
 use Symfony\Component\DependencyInjection\Reference;
 use Webf\TemporalBundle\WebfTemporalBundle;
 
@@ -36,14 +37,46 @@ final class RegisterWorkflowsAndActivitiesPass implements CompilerPassInterface
 
         $workflowClasses = [];
         foreach (array_keys($container->findTaggedServiceIds(WebfTemporalBundle::WORKFLOW_TAG, true)) as $id) {
-            $workflowClasses[] = $this->getClass($container, $id);
+            $workflowClasses[$id] = $this->getClass($container, $id);
         }
+
+        $this->rejectSharedClasses($container, WebfTemporalBundle::ACTIVITY_TAG, $activityClasses);
+        $this->rejectSharedClasses($container, WebfTemporalBundle::WORKFLOW_TAG, $workflowClasses);
 
         $container
             ->getDefinition(WebfTemporalBundle::WORKER_FACTORY_CONFIGURATOR_ID)
             ->setArgument('$activityClasses', $activityClasses)
-            ->setArgument('$workflowClasses', $workflowClasses)
+            ->setArgument('$workflowClasses', array_values($workflowClasses))
             ->setArgument('$activityContainer', ServiceLocatorTagPass::register($container, $activityReferences));
+    }
+
+    /**
+     * The SDK registers activities and workflows by class, and a second registration of the same class makes the worker
+     * fail at start with an `OutOfBoundsException` that names the activity or workflow, but not the services.
+     *
+     * @param array<string, string> $classes classes indexed by service id
+     */
+    private function rejectSharedClasses(ContainerBuilder $container, string $tag, array $classes): void
+    {
+        $idsByClass = [];
+        foreach ($classes as $id => $class) {
+            // The class can be a parameter ("%...%"), so it is resolved to compare it with the others.
+            $resolvedClass = $container->getParameterBag()->resolveValue($class);
+            if (\is_string($resolvedClass)) {
+                $idsByClass[$resolvedClass][] = $id;
+            }
+        }
+
+        foreach ($idsByClass as $class => $ids) {
+            if (\count($ids) > 1) {
+                throw new InvalidArgumentException(\sprintf(
+                    'The services "%s" tagged "%s" share the class "%s". Only one of them can be tagged.',
+                    implode('", "', $ids),
+                    $tag,
+                    $class,
+                ));
+            }
+        }
     }
 
     private function getClass(ContainerBuilder $container, string $id): string
