@@ -143,6 +143,17 @@ final class WebfTemporalBundle extends AbstractBundle
                 ->arrayNode('tls')
                     ->info('Connect to the Temporal server with TLS')
                     ->canBeEnabled()
+                    // A client certificate is useless without its key, and the other way round. Without this check,
+                    // the mistake only shows as an unclear error when the client connects. An empty string counts as
+                    // unset, like in `ServiceClient::createSSL()`.
+                    ->validate()
+                        ->ifTrue(
+                            /** @param array{client_certificate: string|null, client_key: string|null} $tls */
+                            static fn(array $tls): bool => ('' === ($tls['client_certificate'] ?? ''))
+                                !== ('' === ($tls['client_key'] ?? '')),
+                        )
+                        ->thenInvalid('"tls.client_certificate" and "tls.client_key" must be set together.')
+                    ->end()
                     ->children()
                         ->scalarNode('client_certificate')->info('Path of the client certificate (mTLS)')->defaultNull()->end()
                         ->scalarNode('client_key')->info('Path of the client private key (mTLS)')->defaultNull()->end()

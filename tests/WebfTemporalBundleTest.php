@@ -401,6 +401,22 @@ final class WebfTemporalBundleTest extends TestCase
             ],
             '"api_key" and "oidc" cannot be used together.',
         ];
+        yield 'tls client certificate without key' => [
+            ['address' => 'temporal:7233', 'tls' => ['client_certificate' => 'client.pem']],
+            '"tls.client_certificate" and "tls.client_key" must be set together.',
+        ];
+        yield 'tls client key without certificate' => [
+            ['address' => 'temporal:7233', 'tls' => ['client_key' => 'client.key']],
+            '"tls.client_certificate" and "tls.client_key" must be set together.',
+        ];
+        yield 'tls client key with an empty certificate' => [
+            ['address' => 'temporal:7233', 'tls' => ['client_certificate' => '', 'client_key' => 'client.key']],
+            '"tls.client_certificate" and "tls.client_key" must be set together.',
+        ];
+        yield 'tls client certificate with an empty key' => [
+            ['address' => 'temporal:7233', 'tls' => ['client_certificate' => 'client.pem', 'client_key' => '']],
+            '"tls.client_certificate" and "tls.client_key" must be set together.',
+        ];
         yield 'unknown oidc client auth method' => [
             [
                 'address' => 'temporal:7233',
