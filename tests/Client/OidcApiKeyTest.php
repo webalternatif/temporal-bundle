@@ -75,6 +75,28 @@ final class OidcApiKeyTest extends TestCase
         static::assertSame('second', (string) $apiKey);
     }
 
+    public function test_numeric_string_expiration_is_accepted(): void
+    {
+        // Azure AD v1 sends the lifetime as a string.
+        $apiKey = $this->createApiKey([new JsonMockResponse(['access_token' => 'token', 'expires_in' => '3600'])]);
+
+        static::assertSame(1_000_001_800, $apiKey->willRefreshAt());
+    }
+
+    public function test_short_lived_token_is_not_fetched_on_every_call(): void
+    {
+        $apiKey = $this->createApiKey([
+            new JsonMockResponse(['access_token' => 'first', 'expires_in' => 1]),
+            new JsonMockResponse(['access_token' => 'second', 'expires_in' => 1]),
+        ]);
+
+        static::assertSame(1_000_000_001, $apiKey->willRefreshAt());
+        static::assertSame('first', (string) $apiKey);
+
+        $this->clock->sleep(1);
+        static::assertSame('second', (string) $apiKey);
+    }
+
     public function test_http_errors_are_wrapped(): void
     {
         $apiKey = $this->createApiKey([new MockResponse('', ['http_code' => 500])]);
@@ -112,7 +134,13 @@ final class OidcApiKeyTest extends TestCase
         yield 'no access token' => [['expires_in' => 3600]];
         yield 'no expiration' => [['access_token' => 'token']];
         yield 'non string access token' => [['access_token' => 42, 'expires_in' => 3600]];
-        yield 'non integer expiration' => [['access_token' => 'token', 'expires_in' => '3600']];
+        yield 'non integer expiration' => [['access_token' => 'token', 'expires_in' => 3600.5]];
+        yield 'non numeric string expiration' => [['access_token' => 'token', 'expires_in' => 'a3600']];
+        yield 'non integer string expiration' => [['access_token' => 'token', 'expires_in' => '3600.5']];
+        yield 'string expiration with a trailing newline' => [['access_token' => 'token', 'expires_in' => "3600\n"]];
+        yield 'zero expiration' => [['access_token' => 'token', 'expires_in' => 0]];
+        yield 'negative expiration' => [['access_token' => 'token', 'expires_in' => -3600]];
+        yield 'negative string expiration' => [['access_token' => 'token', 'expires_in' => '-3600']];
     }
 
     public function test_default_http_client_and_clock_are_usable(): void

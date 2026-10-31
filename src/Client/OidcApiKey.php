@@ -80,15 +80,23 @@ final class OidcApiKey implements \Stringable
             );
         }
 
-        if (!is_string($result['access_token'] ?? null) || !is_int($result['expires_in'] ?? null)) {
+        $expiresIn = $result['expires_in'] ?? null;
+        // Some servers, such as Azure AD v1, send the lifetime as a string. `is_numeric()` is not used because it
+        // accepts floats, exponents and surrounding whitespace, and `\z` because `$` also matches before a final "\n".
+        if (is_string($expiresIn) && 1 === preg_match('/\A\d+\z/', $expiresIn)) {
+            $expiresIn = (int) $expiresIn;
+        }
+
+        if (!is_string($result['access_token'] ?? null) || !is_int($expiresIn) || $expiresIn < 1) {
             throw new OidcTokenException(sprintf(
                 'The response of "%s" does not contain a valid token.',
                 $this->tokenEndpoint,
             ));
         }
 
-        // Half of the lifetime, so a slow call or a clock drift never leads to an expired token.
-        $this->refreshAt = $this->now() + intdiv(num1: $result['expires_in'], num2: 2);
+        // Half of the lifetime, so a slow call or a clock drift never leads to an expired token. At least one second,
+        // otherwise a token living less than two seconds would be fetched again on every gRPC call.
+        $this->refreshAt = $this->now() + max(1, intdiv(num1: $expiresIn, num2: 2));
 
         return $this->token = $result['access_token'];
     }
