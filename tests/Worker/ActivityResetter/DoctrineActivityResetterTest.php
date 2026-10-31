@@ -66,6 +66,33 @@ final class DoctrineActivityResetterTest extends TestCase
         static::assertSame(['query', 'close', 'query'], $events);
     }
 
+    public function test_connections_left_in_a_transaction_are_closed_before_the_ping(): void
+    {
+        $events = [];
+        $connection = $this->createConnection();
+        $connection->method('isTransactionActive')->willReturn(true);
+        $connection
+            ->expects($this->once())
+            ->method('close')
+            ->willReturnCallback(static function () use (&$events): void {
+                $events[] = 'close';
+            });
+        $connection
+            ->expects($this->once())
+            ->method('executeQuery')
+            ->willReturnCallback(function () use (&$events): Result {
+                $events[] = 'query';
+
+                return $this->createStub(Result::class);
+            });
+
+        $registry = $this->createRegistry(['default' => $this->createEntityManager($connection, isOpen: true)]);
+
+        (new DoctrineActivityResetter($registry))->reset();
+
+        static::assertSame(['close', 'query'], $events);
+    }
+
     public function test_exception_is_thrown_when_the_connection_cannot_be_reestablished(): void
     {
         $exception = $this->createDbalException();
