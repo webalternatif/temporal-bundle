@@ -17,9 +17,6 @@ jobs:
       fail-fast: false
       matrix:
         php-version: [ "8.3", "8.4", "8.5" ]
-    env:
-      # Analyzes the code against the PHP version of the job instead of the one of mago.toml.
-      MAGO_PHP_VERSION: ${{ matrix.php-version }}
     steps:
       - uses: actions/checkout@v5
 
@@ -33,12 +30,19 @@ jobs:
 
       - uses: ramsey/composer-install@v3
 
+      # Analyze and lint check the code against the PHP version of the job instead of the one of mago.toml.
       - name: Analyze
         run: composer analyze -- --reporting-format=github
+        env:
+          MAGO_PHP_VERSION: ${{ matrix.php-version }}
 
       - name: Lint
         run: composer lint -- --reporting-format=github
+        env:
+          MAGO_PHP_VERSION: ${{ matrix.php-version }}
 
+      # The formatter keeps the PHP version of mago.toml. With PHP 8.4+, it removes the parentheses around `new` in
+      # `(new Foo())->bar()`, and that syntax does not parse on PHP 8.3.
       - name: Check formatting
         run: composer fmt-check
 
