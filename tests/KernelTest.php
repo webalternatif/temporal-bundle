@@ -8,6 +8,8 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Tester\ApplicationTester;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Temporal\Worker\WorkerFactoryInterface;
 use Temporal\Worker\WorkerInterface;
@@ -113,6 +115,31 @@ final class KernelTest extends TestCase
         ]);
         static::assertTrue($this->createApplication()->has('temporal:refresh-api-key'));
         static::assertInstanceOf(OidcApiKey::class, $container->get(WebfTemporalBundle::API_KEY_ID));
+    }
+
+    /**
+     * The console builds commands to describe them (`help`, `list --format=json`, completion...), so building the
+     * worker factory there (which casts the API key) would make these calls crash wherever the OIDC server is
+     * unreachable (dev, CI, image builds).
+     */
+    public function test_describing_the_worker_command_does_not_fetch_an_oidc_token(): void
+    {
+        $this->boot([
+            'address' => 'temporal:7233',
+            'oidc' => [
+                'client_id' => 'id',
+                'client_secret' => 'secret',
+                // Nothing listens on port 1, so any token request fails.
+                'token_endpoint' => 'http://127.0.0.1:1/token',
+            ],
+        ]);
+        $application = $this->createApplication();
+        $application->setAutoExit(false);
+
+        $tester = new ApplicationTester($application);
+
+        static::assertSame(Command::SUCCESS, $tester->run(['command' => 'help', 'command_name' => 'temporal:worker']));
+        static::assertStringContainsString('task-queue', $tester->getDisplay());
     }
 
     /**

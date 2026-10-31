@@ -24,6 +24,7 @@ use Temporal\Client\ScheduleClientInterface;
 use Temporal\Client\WorkflowClient;
 use Temporal\Client\WorkflowClientInterface;
 use Temporal\Worker\Transport\Goridge;
+use Temporal\Worker\WorkerFactoryInterface;
 use Temporal\Worker\WorkerOptions;
 use Temporal\WorkerFactory;
 use Tests\Webf\TemporalBundle\Fixtures\EmptyTaskQueue;
@@ -74,6 +75,8 @@ final class WebfTemporalBundleTest extends TestCase
         static::assertSame(WorkerFactory::class, $workerFactory->getClass());
         static::assertSame([WorkerFactory::class, 'create'], $workerFactory->getFactory());
         static::assertSame([], $workerFactory->getArguments());
+        static::assertTrue($workerFactory->isLazy());
+        static::assertSame([['interface' => WorkerFactoryInterface::class]], $workerFactory->getTag('proxy'));
 
         $workerOptions = $container->getDefinition(WebfTemporalBundle::WORKER_OPTIONS_ID);
         static::assertSame(WorkerOptions::class, $workerOptions->getClass());

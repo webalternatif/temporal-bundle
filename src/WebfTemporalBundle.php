@@ -257,10 +257,14 @@ final class WebfTemporalBundle extends AbstractBundle
         $services->alias(ScheduleClient::class, self::SCHEDULE_CLIENT_ID);
         $services->alias(ScheduleClientInterface::class, self::SCHEDULE_CLIENT_ID);
 
-        $workerFactory = $services->set(self::WORKER_FACTORY_ID, WorkerFactory::class)->factory([
-            WorkerFactory::class,
-            'create',
-        ]);
+        // Lazy because the console builds `WorkerCommand` to describe it (`help`, `list --format=json`, completion...),
+        // and building the factory casts the API key, which would fetch an OIDC token on every such console call. A
+        // proxy of the interface, rather than a ghost or a subclass proxy, does not depend on the internals of
+        // `WorkerFactory` (a ghost cannot be built by a factory method anyway).
+        $workerFactory = $services
+            ->set(self::WORKER_FACTORY_ID, WorkerFactory::class)
+            ->factory([WorkerFactory::class, 'create'])
+            ->lazy(WorkerFactoryInterface::class);
         if (null !== $apiKey) {
             $workerFactory->arg(
                 '$credentials',
