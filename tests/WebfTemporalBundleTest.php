@@ -34,6 +34,7 @@ use Tests\Webf\TemporalBundle\Fixtures\TaskQueue;
 use Webf\TemporalBundle\Client\ClientAuthMethod;
 use Webf\TemporalBundle\Client\ClientConfig;
 use Webf\TemporalBundle\Client\OidcApiKey;
+use Webf\TemporalBundle\Client\OidcToken;
 use Webf\TemporalBundle\Client\StaticApiKey;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 use Webf\TemporalBundle\Command\WorkerCommand;
@@ -45,6 +46,7 @@ use Webf\TemporalBundle\Worker\WorkerFactoryConfigurator;
 #[CoversClass(WebfTemporalBundle::class)]
 #[UsesClass(ClientConfig::class)]
 #[UsesClass(OidcApiKey::class)]
+#[UsesClass(OidcToken::class)]
 final class WebfTemporalBundleTest extends TestCase
 {
     public function test_default_configuration(): void
@@ -221,6 +223,21 @@ final class WebfTemporalBundleTest extends TestCase
         $client = $container->getDefinition(WebfTemporalBundle::API_KEY_ID)->getArgument('$client');
         static::assertInstanceOf(Definition::class, $client);
         static::assertSame(ClientAuthMethod::ClientSecretPost, $client->getArgument('$authMethod'));
+    }
+
+    public function test_oidc_cache_pool(): void
+    {
+        $oidc = [
+            'client_id' => 'id',
+            'client_secret' => 'secret',
+            'token_endpoint' => 'https://oidc.example.com/token',
+        ];
+
+        $container = $this->load(['address' => 'temporal:7233', 'oidc' => ['cache_pool' => 'cache.oidc'] + $oidc]);
+        static::assertEquals(
+            new Reference('cache.oidc'),
+            $container->getDefinition(WebfTemporalBundle::API_KEY_ID)->getArgument('$cache'),
+        );
     }
 
     public function test_oidc_api_key_uses_its_own_http_client_without_framework_bundle(): void

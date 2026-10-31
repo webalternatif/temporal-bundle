@@ -35,6 +35,7 @@
         "doctrine/persistence": "^2.2 || ^3.4 || ^4.0",
         "infection/infection": "^0.35.8",
         "phpunit/phpunit": "^12.5",
+        "symfony/cache": "^6.4 || ^7.4 || ^8.1",
         "symfony/framework-bundle": "^6.4 || ^7.4 || ^8.1"
     },
     "conflict": {
@@ -42,7 +43,8 @@
         "doctrine/orm": "<2.10"
     },
     "suggest": {
-        "doctrine/orm": "To reset Doctrine entity managers before each activity"
+        "doctrine/orm": "To reset Doctrine entity managers before each activity",
+        "symfony/cache": "To share OIDC tokens between processes (oidc.cache_pool option)"
     },
     "scripts": {
         "analyze": "mago analyze",

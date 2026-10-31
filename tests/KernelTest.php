@@ -23,6 +23,7 @@ use Tests\Webf\TemporalBundle\Fixtures\TestKernel;
 use Tests\Webf\TemporalBundle\Fixtures\Workflow\GreetingWorkflow;
 use Webf\TemporalBundle\Client\ClientConfig;
 use Webf\TemporalBundle\Client\OidcApiKey;
+use Webf\TemporalBundle\Client\OidcToken;
 use Webf\TemporalBundle\Client\StaticApiKey;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 use Webf\TemporalBundle\Command\WorkerCommand;
@@ -36,6 +37,7 @@ use Webf\TemporalBundle\Worker\WorkerFactoryConfigurator;
 #[CoversClass(WebfTemporalBundle::class)]
 #[UsesClass(ClientConfig::class)]
 #[UsesClass(OidcApiKey::class)]
+#[UsesClass(OidcToken::class)]
 #[UsesClass(RefreshApiKeyCommand::class)]
 #[UsesClass(RegisterWorkflowsAndActivitiesPass::class)]
 #[UsesClass(StaticApiKey::class)]
@@ -121,6 +123,24 @@ final class KernelTest extends TestCase
             ],
         ]);
         static::assertTrue($this->createApplication()->has('temporal:refresh-api-key'));
+        static::assertInstanceOf(OidcApiKey::class, $container->get(WebfTemporalBundle::API_KEY_ID));
+    }
+
+    /**
+     * Every pool of FrameworkBundle implements the cache contracts expected by the API key.
+     */
+    public function test_oidc_api_key_accepts_a_framework_bundle_cache_pool(): void
+    {
+        $container = $this->boot([
+            'address' => 'temporal:7233',
+            'oidc' => [
+                'cache_pool' => 'cache.app',
+                'client_id' => 'id',
+                'client_secret' => 'secret',
+                'token_endpoint' => 'https://oidc.example.com/token',
+            ],
+        ]);
+
         static::assertInstanceOf(OidcApiKey::class, $container->get(WebfTemporalBundle::API_KEY_ID));
     }
 

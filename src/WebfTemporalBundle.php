@@ -46,6 +46,7 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\tagged_it
  *     namespace: string,
  *     oidc: array{
  *         enabled: bool,
+ *         cache_pool: string|null,
  *         client_auth_method: value-of<ClientAuthMethod>,
  *         client_id: string,
  *         client_secret: string,
@@ -115,6 +116,10 @@ final class WebfTemporalBundle extends AbstractBundle
                     ->info('Fetch API keys from an OIDC server with the client credentials grant')
                     ->canBeEnabled()
                     ->children()
+                        ->scalarNode('cache_pool')
+                            ->info('Cache pool that shares tokens between processes (null to keep them in the memory of each process)')
+                            ->defaultNull()
+                        ->end()
                         ->enumNode('client_auth_method')
                             ->info('How the client authenticates to the token endpoint (HTTP Basic is the one every server supports)')
                             ->values(array_column(ClientAuthMethod::cases(), 'value'))
@@ -213,7 +218,7 @@ final class WebfTemporalBundle extends AbstractBundle
             $apiKey = service(self::API_KEY_ID);
         }
         if ($config['oidc']['enabled']) {
-            $services
+            $oidcApiKey = $services
                 ->set(self::API_KEY_ID, OidcApiKey::class)
                 ->arg('$tokenEndpoint', $config['oidc']['token_endpoint'])
                 ->arg('$client', inline_service(ClientConfig::class)
@@ -222,6 +227,10 @@ final class WebfTemporalBundle extends AbstractBundle
                     ->arg('$authMethod', ClientAuthMethod::from($config['oidc']['client_auth_method'])))
                 // The default HTTP client of the API key is used when FrameworkBundle does not provide one.
                 ->arg('$httpClient', service('http_client')->nullOnInvalid());
+            $cachePool = $config['oidc']['cache_pool'];
+            if (null !== $cachePool) {
+                $oidcApiKey->arg('$cache', service($cachePool));
+            }
             $apiKey = service(self::API_KEY_ID);
 
             $services->set(self::RPC_ID, Goridge::class)->factory([Goridge::class, 'create']);

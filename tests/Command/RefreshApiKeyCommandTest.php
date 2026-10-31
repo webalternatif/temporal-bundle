@@ -18,11 +18,13 @@ use Tests\Webf\TemporalBundle\Fixtures\StopLoop;
 use Tests\Webf\TemporalBundle\Fixtures\StoppingClock;
 use Webf\TemporalBundle\Client\ClientConfig;
 use Webf\TemporalBundle\Client\OidcApiKey;
+use Webf\TemporalBundle\Client\OidcToken;
 use Webf\TemporalBundle\Command\RefreshApiKeyCommand;
 
 #[CoversClass(RefreshApiKeyCommand::class)]
 #[UsesClass(ClientConfig::class)]
 #[UsesClass(OidcApiKey::class)]
+#[UsesClass(OidcToken::class)]
 final class RefreshApiKeyCommandTest extends TestCase
 {
     public function test_key_is_pushed_before_it_expires(): void

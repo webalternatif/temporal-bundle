@@ -99,6 +99,9 @@ webf_temporal:
     oidc:
         enabled: false
 
+        # Cache pool that shares tokens between processes (null to keep them in the memory of each process)
+        cache_pool: null
+
         # How the client authenticates to the token endpoint (HTTP Basic is the one every server supports)
         client_auth_method: client_secret_basic # One of "client_secret_basic"; "client_secret_post"
         client_id: ~ # Required
@@ -317,6 +320,17 @@ service:
 
 The HTTP client of FrameworkBundle (`http_client` service) is used to fetch
 tokens when available.
+
+By default, each process (PHP-FPM request, RoadRunner worker...) keeps its
+token in memory, so each of them fetches its own token. The `cache_pool` option
+shares tokens between processes through a cache pool, such as `cache.app`. The
+pool must implement `Symfony\Contracts\Cache\CacheInterface`, as every pool of
+FrameworkBundle does (this needs `symfony/cache`).
+
+> [!NOTE]
+> Tokens are stored as they are in the pool. `cache.app` is a filesystem pool
+> by default: use a pool with its own storage if tokens must not be written to
+> `var/cache/`.
 
 ### Resetting services between activities
 

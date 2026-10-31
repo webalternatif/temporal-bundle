@@ -7,18 +7,23 @@ namespace Tests\Webf\TemporalBundle\Client;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\JsonMockResponse;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use Symfony\Contracts\Cache\CacheInterface;
+use Symfony\Contracts\Cache\ItemInterface;
 use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
 use Webf\TemporalBundle\Client\ClientAuthMethod;
 use Webf\TemporalBundle\Client\ClientConfig;
 use Webf\TemporalBundle\Client\OidcApiKey;
+use Webf\TemporalBundle\Client\OidcToken;
 use Webf\TemporalBundle\Exception\OidcTokenException;
 
 #[CoversClass(ClientConfig::class)]
 #[CoversClass(OidcApiKey::class)]
+#[CoversClass(OidcToken::class)]
 final class OidcApiKeyTest extends TestCase
 {
     private const string TOKEN_ENDPOINT = 'https://oidc.example.com/token';
@@ -152,6 +157,92 @@ final class OidcApiKeyTest extends TestCase
         static::assertSame('second', (string) $apiKey);
     }
 
+    /**
+     * Each PHP-FPM request, and each RoadRunner worker, builds its own API key, so without a shared cache every one of
+     * them fetches its own token.
+     */
+    public function test_token_is_shared_through_the_cache(): void
+    {
+        $httpClient = new MockHttpClient([
+            new JsonMockResponse(['access_token' => 'first', 'expires_in' => 3600]),
+            new JsonMockResponse(['access_token' => 'second', 'expires_in' => 3600]),
+        ]);
+        $cache = new ArrayAdapter();
+
+        static::assertSame('first', (string) $this->createCachedApiKey($httpClient, $cache));
+        static::assertSame('first', (string) $this->createCachedApiKey($httpClient, $cache));
+        static::assertSame(1_000_001_800, $this->createCachedApiKey($httpClient, $cache)->willRefreshAt());
+        static::assertSame(1, $httpClient->getRequestsCount());
+        static::assertSame([self::cacheKey(self::TOKEN_ENDPOINT, 'id')], array_keys($cache->getValues()));
+    }
+
+    /**
+     * The cache expires items with its own clock, which may be late compared to the clock of the API key.
+     */
+    public function test_cached_token_is_fetched_again_from_its_refresh_time(): void
+    {
+        $httpClient = new MockHttpClient([
+            new JsonMockResponse(['access_token' => 'first', 'expires_in' => 3600]),
+            new JsonMockResponse(['access_token' => 'second', 'expires_in' => 3600]),
+        ]);
+        $cache = new ArrayAdapter();
+        (string) $this->createCachedApiKey($httpClient, $cache);
+
+        $this->clock->sleep(1800);
+
+        static::assertSame('second', (string) $this->createCachedApiKey($httpClient, $cache));
+        static::assertSame('second', (string) $this->createCachedApiKey($httpClient, $cache));
+        static::assertSame(2, $httpClient->getRequestsCount());
+    }
+
+    public function test_tokens_of_other_clients_are_not_shared(): void
+    {
+        // Each token names the endpoint and the client it was fetched for (HTTP Basic credentials are in the headers).
+        $httpClient = new MockHttpClient(static fn(
+            string $method,
+            string $url,
+            array $options,
+        ) => new JsonMockResponse([
+            'access_token' => $url . ' ' . json_encode($options['headers'] ?? null, JSON_THROW_ON_ERROR),
+            'expires_in' => 3600,
+        ]));
+        $cache = new ArrayAdapter();
+        $createApiKey = fn(string $tokenEndpoint, string $clientId): OidcApiKey => new OidcApiKey(
+            $tokenEndpoint,
+            new ClientConfig($clientId, 'secret'),
+            $httpClient,
+            $this->clock,
+            $cache,
+        );
+
+        $tokens = [
+            (string) $createApiKey(self::TOKEN_ENDPOINT, clientId: 'id'),
+            (string) $createApiKey(self::TOKEN_ENDPOINT, clientId: 'other'),
+            (string) $createApiKey(tokenEndpoint: 'https://other.example.com/token', clientId: 'id'),
+        ];
+
+        static::assertCount(3, array_unique($tokens));
+        static::assertSame(3, $httpClient->getRequestsCount());
+    }
+
+    public function test_cached_token_expires_at_its_refresh_time(): void
+    {
+        $item = $this->createMock(ItemInterface::class);
+        $item->expects($this->once())->method('expiresAfter')->with(1800)->willReturnSelf();
+        $cache = $this->createMock(CacheInterface::class);
+        $cache
+            ->expects($this->once())
+            ->method('get')
+            ->willReturnCallback(static fn(string $key, callable $callback): mixed => $callback($item));
+
+        $apiKey = $this->createCachedApiKey(new MockHttpClient([new JsonMockResponse([
+            'access_token' => 'token',
+            'expires_in' => 3600,
+        ])]), $cache);
+
+        static::assertSame('token', (string) $apiKey);
+    }
+
     public function test_http_errors_are_wrapped(): void
     {
         $apiKey = $this->createApiKey([new MockResponse('', ['http_code' => 500])]);
@@ -203,6 +294,22 @@ final class OidcApiKeyTest extends TestCase
         $apiKey = new OidcApiKey(self::TOKEN_ENDPOINT, new ClientConfig('id', 'secret'));
 
         static::assertInstanceOf(\Stringable::class, $apiKey);
+    }
+
+    private function createCachedApiKey(MockHttpClient $httpClient, CacheInterface $cache): OidcApiKey
+    {
+        return new OidcApiKey(
+            self::TOKEN_ENDPOINT,
+            new ClientConfig('id', 'secret'),
+            $httpClient,
+            $this->clock,
+            $cache,
+        );
+    }
+
+    private static function cacheKey(string $tokenEndpoint, string $clientId): string
+    {
+        return 'webf_temporal.oidc_token.' . hash('xxh128', serialize([$tokenEndpoint, $clientId]));
     }
 
     /**
